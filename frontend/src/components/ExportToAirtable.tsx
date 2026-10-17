@@ -1,16 +1,27 @@
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
+import { useToast } from "@/components/Toast";
 import type { ApiExportJob } from "@/types";
 
 type Props = { projectId: string };
 
 const POLL_MS = 1500;
 
+function plural(n: number, word: string) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function summary(job: ApiExportJob) {
+  const parts = [`${plural(job.created, "new task")} exported`];
+  if (job.skipped) parts.push(`${job.skipped} already in Airtable`);
+  return parts.join(" · ");
+}
+
 export function ExportToAirtable({ projectId }: Props) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const queryKey = ["export", projectId];
-  const [startError, setStartError] = useState<string | null>(null);
 
   const { data } = useQuery({
     queryKey,
@@ -21,68 +32,53 @@ export function ExportToAirtable({ projectId }: Props) {
   const startExport = useMutation({
     mutationFn: () =>
       apiFetch<{ job: ApiExportJob }>(`/api/projects/${projectId}/export`, { method: "POST" }),
-    onMutate: () => setStartError(null),
     onSuccess: (res) => queryClient.setQueryData(queryKey, res),
-    onError: (err) => setStartError(err instanceof Error ? err.message : "export failed"),
+    onError: (err) =>
+      toast.show({
+        variant: "error",
+        title: "Couldn't start the export",
+        description: err instanceof Error ? err.message : undefined,
+      }),
   });
 
   const job = data?.job;
+
+  // Toast only when a job we watched running finishes, not for an old
+  // finished job that loads with the page.
+  const watching = useRef<string | null>(null);
+  useEffect(() => {
+    if (!job) return;
+    if (job.status === "running") {
+      watching.current = job.id;
+      return;
+    }
+    if (watching.current !== job.id) return;
+    watching.current = null;
+
+    if (job.status === "succeeded") {
+      toast.show({ variant: "success", title: "Export complete", description: summary(job) });
+    } else if (job.status === "partial") {
+      const failedTitles = job.errors.slice(0, 3).map((e) => `"${e.title}"`).join(", ");
+      const more = job.failed > 3 ? ` and ${job.failed - 3} more` : "";
+      toast.show({
+        variant: "warning",
+        title: `Export finished with ${plural(job.failed, "failed task")}`,
+        description: `${summary(job)}. Failed: ${failedTitles}${more}.`,
+      });
+    } else {
+      toast.show({ variant: "error", title: "Export failed", description: job.error ?? undefined });
+    }
+  }, [job, toast]);
+
   const running = job?.status === "running" || startExport.isPending;
 
   return (
-    <div className="flex flex-col items-end gap-1 max-w-sm text-right">
-      <button
-        onClick={() => startExport.mutate()}
-        disabled={running}
-        className="border-2 border-accent hover:bg-accent px-4 py-2 rounded-md disabled:opacity-50 disabled:hover:bg-transparent"
-      >
-        {running ? "exporting…" : "Export"}
-      </button>
-      {startError && (
-        <p className="text-xs text-red-400" role="alert">
-          {startError}
-        </p>
-      )}
-      {/* {job && <ExportStatus job={job} />} */}
-    </div>
-  );
-}
-
-function ExportStatus({ job }: { job: ApiExportJob }) {
-  const done = job.created + job.skipped + job.failed;
-  if (job.status === "running") {
-    return (
-      <p className="text-xs text-muted" aria-live="polite">
-        {job.total ? `${done} / ${job.total} tasks` : "starting…"}
-      </p>
-    );
-  }
-  if (job.status === "failed") {
-    return (
-      <p className="text-xs text-red-400" role="alert">
-        export failed: {job.error}
-      </p>
-    );
-  }
-  return (
-    <div className="text-xs">
-      <p className={job.status === "partial" ? "text-amber-400" : "text-muted"}>
-        {job.created} new {job.created === 1 ? "task" : "tasks"} exported · {job.skipped} already in Airtable
-        {job.failed > 0 && ` · ${job.failed} failed`}
-        {job.finishedAt && ` · ${new Date(job.finishedAt).toLocaleString()}`}
-      </p>
-      {job.errors.length > 0 && (
-        <details className="mt-1 text-left">
-          <summary className="cursor-pointer text-amber-400">show failed tasks</summary>
-          <ul className="mt-1 space-y-1 text-muted">
-            {job.errors.map((e) => (
-              <li key={e.taskId}>
-                <span className="text-white">{e.title}</span>: {e.error}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
+    <button
+      onClick={() => startExport.mutate()}
+      disabled={running}
+      className="border-2 border-accent hover:bg-accent px-4 py-2 rounded-md disabled:opacity-50 disabled:hover:bg-transparent"
+    >
+      {running ? "exporting…" : "Export"}
+    </button>
   );
 }
