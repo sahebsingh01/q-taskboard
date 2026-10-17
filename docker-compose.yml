@@ -19,6 +19,10 @@ services:
       - "8000:8000"
     depends_on:
       - db
+    # Supplies AIRTABLE_* settings; the explicit values below take precedence.
+    env_file:
+      - path: .env
+        required: false
     environment:
       POSTGRES_DB: taskboard
       POSTGRES_USER: taskboard

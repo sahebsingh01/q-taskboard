@@ -12,6 +12,9 @@ export type PermissionCodename =
   | "delete_task"
   | "view_task"
   | "export_task"
+  | "add_comment"
+  | "view_comment"
+  | "view_activity"
   | (string & {});
 
 export type ProjectPermissions = {
@@ -67,3 +70,43 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 export const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "review", "done"];
+
+export type ExportJobStatus = "running" | "succeeded" | "partial" | "failed";
+
+export type ApiExportJob = {
+  id: string;
+  status: ExportJobStatus;
+  total: number;
+  created: number;
+  skipped: number;
+  failed: number;
+  errors: { taskId: string; title: string; error: string }[];
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
+export type ApiComment = {
+  id: string;
+  taskId: string;
+  author: ApiUser;
+  body: string;
+  createdAt: string;
+};
+
+type ActivityUserRef = { id: string; name: string } | null;
+
+type ActivityBase = {
+  id: string;
+  actor: ActivityUserRef;
+  task: { id: string | null; title: string };
+  createdAt: string;
+};
+
+export type ApiActivity = ActivityBase &
+  (
+    | { verb: "task_created"; data: { status: TaskStatus } }
+    | { verb: "status_changed"; data: { from: TaskStatus; to: TaskStatus } }
+    | { verb: "assignee_changed"; data: { from: ActivityUserRef; to: ActivityUserRef } }
+    | { verb: "comment_added"; data: { commentId: string; excerpt: string } }
+  );
