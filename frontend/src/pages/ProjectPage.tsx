@@ -5,6 +5,7 @@ import { apiFetch, getToken } from "@/lib/api-client";
 import { Header } from "@/components/Header";
 import { StatusColumn } from "@/components/StatusColumn";
 import { TaskDetail } from "@/components/TaskDetail";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { ApiProjectDetail, ApiTask, TaskStatus } from "@/types";
 import { STATUS_ORDER } from "@/types";
 
@@ -12,6 +13,7 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { can } = usePermissions(id);
 
   const [activeTask, setActiveTask] = useState<ApiTask | null>(null);
   const [newTitle, setNewTitle] = useState("");
@@ -86,51 +88,56 @@ export default function ProjectPage() {
                   owner: {project.owner.name} · {project.memberships.length} members
                 </p>
               </div>
+              {can("export_task") && (
+                <button className="border-2 border-accent hover:bg-accent px-4 py-2 rounded-md">Export</button>
+              )}
             </div>
 
-            <section className="bg-surface border border-border rounded-lg p-4 mb-6">
-              <h2 className="text-sm font-medium mb-3">add a task</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!newTitle.trim()) return;
-                  setError(null);
-                  createTask.mutate({ title: newTitle.trim(), status: newColumn });
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  type="text"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="task title"
-                  className="flex-1 rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                />
-                <select
-                  value={newColumn}
-                  onChange={(e) => setNewColumn(e.target.value as TaskStatus)}
-                  className="rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            {can("add_task") && (
+              <section className="bg-surface border border-border rounded-lg p-4 mb-6">
+                <h2 className="text-sm font-medium mb-3">add a task</h2>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!newTitle.trim()) return;
+                    setError(null);
+                    createTask.mutate({ title: newTitle.trim(), status: newColumn });
+                  }}
+                  className="flex gap-2"
                 >
-                  {STATUS_ORDER.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  disabled={createTask.isPending}
-                  className="bg-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-md px-4 disabled:opacity-50"
-                >
-                  add
-                </button>
-              </form>
-              {error && (
-                <p className="text-sm text-red-400 mt-2" role="alert">
-                  {error}
-                </p>
-              )}
-            </section>
+                  <input
+                    type="text"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="task title"
+                    className="flex-1 rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                  <select
+                    value={newColumn}
+                    onChange={(e) => setNewColumn(e.target.value as TaskStatus)}
+                    className="rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  >
+                    {STATUS_ORDER.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={createTask.isPending}
+                    className="bg-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-md px-4 disabled:opacity-50"
+                  >
+                    add
+                  </button>
+                </form>
+                {error && (
+                  <p className="text-sm text-red-400 mt-2" role="alert">
+                    {error}
+                  </p>
+                )}
+              </section>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {STATUS_ORDER.map((s) => (
@@ -168,6 +175,8 @@ export default function ProjectPage() {
           task={activeTask}
           projectId={id!}
           members={project.memberships}
+          canEdit={can("change_task")}
+          canDelete={can("delete_task")}
           onClose={() => setActiveTask(null)}
         />
       )}

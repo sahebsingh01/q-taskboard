@@ -1,9 +1,11 @@
 import { Link, useNavigate } from "react-router-dom";
 import { clearSession, getStoredUser } from "@/lib/api-client";
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function Header() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [name, setName] = useState<string>("");
 
   useEffect(() => {
@@ -13,6 +15,8 @@ export function Header() {
 
   function onLogout() {
     clearSession();
+    // Drop cached data (incl. permissions) so the next user never sees ours.
+    queryClient.clear();
     navigate("/login");
   }
 

@@ -8,10 +8,12 @@ type Props = {
   task: ApiTask;
   projectId: string;
   members: ApiProjectMember[];
+  canEdit: boolean;
+  canDelete: boolean;
   onClose: () => void;
 };
 
-export function TaskDetail({ task, projectId, members, onClose }: Props) {
+export function TaskDetail({ task, projectId, members, canEdit, canDelete, onClose }: Props) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -62,7 +64,7 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">edit task</h2>
+          <h2 className="text-lg font-semibold">{canEdit ? "edit task" : "task details"}</h2>
           <button onClick={onClose} className="text-muted hover:text-white">
             ✕
           </button>
@@ -74,6 +76,7 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            disabled={!canEdit}
             className="mt-1 block w-full rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
           />
         </label>
@@ -83,6 +86,7 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            disabled={!canEdit}
             rows={4}
             className="mt-1 block w-full rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
           />
@@ -94,6 +98,7 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as TaskStatus)}
+              disabled={!canEdit}
               className="mt-1 block w-full rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
             >
               {STATUS_ORDER.map((s) => (
@@ -109,6 +114,7 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
             <select
               value={assigneeId}
               onChange={(e) => setAssigneeId(e.target.value)}
+              disabled={!canEdit}
               className="mt-1 block w-full rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
             >
               <option value="">unassigned</option>
@@ -128,27 +134,33 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
         )}
 
         <div className="flex items-center justify-between gap-3">
-          <button
-            onClick={() => deleteTask.mutate()}
-            disabled={deleteTask.isPending}
-            className="text-sm text-red-400 hover:text-red-300"
-          >
-            delete task
-          </button>
+          {canDelete ? (
+            <button
+              onClick={() => deleteTask.mutate()}
+              disabled={deleteTask.isPending}
+              className="text-sm text-red-400 hover:text-red-300"
+            >
+              delete task
+            </button>
+          ) : (
+            <span />
+          )}
           <div className="flex gap-2">
             <button
               onClick={onClose}
               className="text-sm px-4 py-2 rounded-md border border-border hover:border-muted"
             >
-              cancel
+              {canEdit ? "cancel" : "close"}
             </button>
-            <button
-              onClick={onSave}
-              disabled={updateTask.isPending}
-              className="text-sm px-4 py-2 rounded-md bg-accent text-white hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {updateTask.isPending ? "saving…" : "save"}
-            </button>
+            {canEdit && (
+              <button
+                onClick={onSave}
+                disabled={updateTask.isPending}
+                className="text-sm px-4 py-2 rounded-md bg-accent text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {updateTask.isPending ? "saving…" : "save"}
+              </button>
+            )}
           </div>
         </div>
       </div>

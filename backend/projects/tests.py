@@ -1,7 +1,7 @@
 import pytest
 from rest_framework.test import APIClient
 from users.models import User
-from projects.models import Project, Membership, Task
+from projects.models import Project, Membership, Task, RolePermission
 
 
 @pytest.fixture
@@ -97,3 +97,73 @@ class TestTasks:
 
         response = client.delete(f'/api/tasks/{task.id}')
         assert response.status_code == 403
+
+
+@pytest.mark.django_db
+class TestPermissionMapping:
+    def _codenames(self, role):
+        return set(RolePermission.objects.filter(role=role).values_list('permission__codename', flat=True))
+
+    def test_admin_has_every_permission(self):
+        from django.contrib.auth.models import Permission
+        assert self._codenames('admin') == set(Permission.objects.values_list('codename', flat=True))
+
+    def test_member_permissions(self):
+        assert self._codenames('member') == {
+            'view_project', 'add_task', 'change_task', 'delete_task', 'view_task', 'export_task',
+        }
+
+    def test_viewer_permissions(self):
+        assert self._codenames('viewer') == {'view_project', 'view_task'}
+
+    def test_viewer_cannot_edit_task(self, client, user):
+        owner = User.objects.create_user(email='owner@example.com', name='Owner', password='password123')
+        project = Project.objects.create(name='P', owner=owner)
+        Membership.objects.create(user=owner, project=project, role='admin')
+        Membership.objects.create(user=user, project=project, role='viewer')
+        task = Task.objects.create(project=project, title='A task', created_by=owner)
+
+        resp = client.post('/api/auth/login', {'email': 'meera@taskboard.dev', 'password': 'password123'}, format='json')
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['token']}")
+
+        response = client.patch(f'/api/tasks/{task.id}', {'title': 'Hacked'}, format='json')
+        assert response.status_code == 403
+        task.refresh_from_db()
+        assert task.title == 'A task'
+
+    def test_non_member_cannot_edit_task(self, auth_client):
+        owner = User.objects.create_user(email='owner@example.com', name='Owner', password='password123')
+        project = Project.objects.create(name='P', owner=owner)
+        task = Task.objects.create(project=project, title='A task', created_by=owner)
+
+        response = auth_client.patch(f'/api/tasks/{task.id}', {'title': 'Hacked'}, format='json')
+        assert response.status_code == 403
+
+    def test_member_cannot_update_project(self, client, user):
+        owner = User.objects.create_user(email='owner@example.com', name='Owner', password='password123')
+        project = Project.objects.create(name='P', owner=owner)
+        Membership.objects.create(user=user, project=project, role='member')
+
+        resp = client.post('/api/auth/login', {'email': 'meera@taskboard.dev', 'password': 'password123'}, format='json')
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['token']}")
+
+        assert client.patch(f'/api/projects/{project.id}', {'name': 'X'}, format='json').status_code == 403
+        assert client.post(f'/api/projects/{project.id}/members', {'email': 'owner@example.com'}, format='json').status_code == 403
+
+    def test_my_permissions_endpoint(self, auth_client, user):
+        admin_project = Project.objects.create(name='A', owner=user)
+        Membership.objects.create(user=user, project=admin_project, role='admin')
+        owner = User.objects.create_user(email='owner@example.com', name='Owner', password='password123')
+        viewer_project = Project.objects.create(name='V', owner=owner)
+        Membership.objects.create(user=user, project=viewer_project, role='viewer')
+        Project.objects.create(name='Other', owner=owner)
+
+        response = auth_client.get('/api/users/me/permissions')
+        assert response.status_code == 200
+        projects = response.data['projects']
+        assert set(projects) == {str(admin_project.id), str(viewer_project.id)}
+        assert projects[str(viewer_project.id)] == {'role': 'viewer', 'permissions': ['view_project', 'view_task']}
+        assert 'delete_project' in projects[str(admin_project.id)]['permissions']
+
+    def test_my_permissions_requires_auth(self, client):
+        assert client.get('/api/users/me/permissions').status_code == 401
