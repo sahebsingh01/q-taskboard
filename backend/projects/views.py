@@ -4,6 +4,7 @@ from rest_framework import status
 from django.db import connection
 from users.serializers import UserSerializer
 from .models import Project, Membership, Task
+from .permissions import has_permission, get_user_project_permissions
 from .serializers import ProjectDetailSerializer, TaskSerializer
 
 
@@ -14,8 +15,8 @@ def _get_membership(user, project_id):
         return None
 
 
-def _can_edit_tasks(role):
-    return role in ('admin', 'member')
+def _forbidden(message='forbidden'):
+    return Response({'error': message}, status=status.HTTP_403_FORBIDDEN)
 
 
 class ProjectListCreateView(APIView):
@@ -57,8 +58,8 @@ class ProjectListCreateView(APIView):
 class ProjectDetailView(APIView):
     def get(self, request, project_id):
         membership = _get_membership(request.user, project_id)
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        if not has_permission(membership, 'view_project'):
+            return _forbidden()
         try:
             project = (
                 Project.objects
@@ -72,10 +73,8 @@ class ProjectDetailView(APIView):
 
     def patch(self, request, project_id):
         membership = _get_membership(request.user, project_id)
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        if membership.role != 'admin':
-            return Response({'error': 'only admins can update projects'}, status=status.HTTP_403_FORBIDDEN)
+        if not has_permission(membership, 'change_project'):
+            return _forbidden('you do not have permission to update this project')
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
@@ -89,10 +88,8 @@ class ProjectDetailView(APIView):
 
     def delete(self, request, project_id):
         membership = _get_membership(request.user, project_id)
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        if membership.role != 'admin':
-            return Response({'error': 'only admins can delete projects'}, status=status.HTTP_403_FORBIDDEN)
+        if not has_permission(membership, 'delete_project'):
+            return _forbidden('you do not have permission to delete this project')
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
@@ -104,8 +101,8 @@ class ProjectDetailView(APIView):
 class TaskListCreateView(APIView):
     def get(self, request, project_id):
         membership = _get_membership(request.user, project_id)
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        if not has_permission(membership, 'view_task'):
+            return _forbidden()
 
         q = request.query_params.get('q')
         if q:
@@ -132,10 +129,8 @@ class TaskListCreateView(APIView):
 
     def post(self, request, project_id):
         membership = _get_membership(request.user, project_id)
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        if not _can_edit_tasks(membership.role):
-            return Response({'error': 'viewers cannot create tasks'}, status=status.HTTP_403_FORBIDDEN)
+        if not has_permission(membership, 'add_task'):
+            return _forbidden('you do not have permission to create tasks')
 
         title = (request.data.get('title') or '').strip()
         if not title:
@@ -167,7 +162,9 @@ class TaskDetailView(APIView):
             task = Task.objects.get(id=task_id)
         except Task.DoesNotExist:
             return Response({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
-
+        membership = _get_membership(request.user, task.project_id)
+        if not has_permission(membership, 'change_task'):
+            return _forbidden('you do not have permission to edit tasks')
         if 'title' in request.data:
             task.title = request.data['title'].strip()
         if 'description' in request.data:
@@ -190,11 +187,9 @@ class TaskDetailView(APIView):
         except Task.DoesNotExist:
             return Response({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        membership = _get_membership(request.user, str(task.project_id))
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        if not _can_edit_tasks(membership.role):
-            return Response({'error': 'viewers cannot delete tasks'}, status=status.HTTP_403_FORBIDDEN)
+        membership = _get_membership(request.user, task.project_id)
+        if not has_permission(membership, 'delete_task'):
+            return _forbidden('you do not have permission to delete tasks')
 
         task.delete()
         return Response({'ok': True})
@@ -203,10 +198,8 @@ class TaskDetailView(APIView):
 class MemberAddView(APIView):
     def post(self, request, project_id):
         membership = _get_membership(request.user, project_id)
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        if membership.role != 'admin':
-            return Response({'error': 'only admins can add members'}, status=status.HTTP_403_FORBIDDEN)
+        if not has_permission(membership, 'add_membership'):
+            return _forbidden('you do not have permission to add members')
 
         email = (request.data.get('email') or '').strip()
         role = request.data.get('role', 'member')
@@ -219,12 +212,13 @@ class MemberAddView(APIView):
         except UserModel.DoesNotExist:
             return Response({'error': 'user not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        membership_obj, created = Membership.objects.get_or_create(
-            user=user,
-            project_id=project_id,
-            defaults={'role': role},
-        )
-        if not created:
+        membership_obj = Membership.objects.filter(user=user, project_id=project_id).first()
+        created = membership_obj is None
+        if created:
+            membership_obj = Membership.objects.create(user=user, project_id=project_id, role=role)
+        else:
+            if not has_permission(membership, 'change_membership'):
+                return _forbidden('you do not have permission to change member roles')
             membership_obj.role = role
             membership_obj.save()
 
@@ -234,10 +228,13 @@ class MemberAddView(APIView):
 class ExportView(APIView):
     def post(self, request, project_id):
         membership = _get_membership(request.user, project_id)
-        if not membership:
-            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        if not _can_edit_tasks(membership.role):
-            return Response({'error': 'only admins and members can export'}, status=status.HTTP_403_FORBIDDEN)
+        if not has_permission(membership, 'export_task'):
+            return _forbidden('you do not have permission to export tasks')
 
         tasks = Task.objects.filter(project_id=project_id).select_related('assignee', 'created_by')
         return Response({'exported': 0, 'tasks': TaskSerializer(tasks, many=True).data})
+
+
+class MyPermissionsView(APIView):
+    def get(self, request):
+        return Response({'projects': get_user_project_permissions(request.user)})

@@ -1,4 +1,24 @@
 export type Role = "admin" | "member" | "viewer";
+export type PermissionCodename =
+  | "view_project"
+  | "change_project"
+  | "delete_project"
+  | "add_membership"
+  | "change_membership"
+  | "delete_membership"
+  | "view_membership"
+  | "add_task"
+  | "change_task"
+  | "delete_task"
+  | "view_task"
+  | "export_task"
+  | (string & {});
+
+export type ProjectPermissions = {
+  role: Role;
+  permissions: PermissionCodename[];
+};
+
 export type TaskStatus = "todo" | "in_progress" | "review" | "done";
 
 export type ApiUser = {

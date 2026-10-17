@@ -60,3 +60,13 @@ class Task(models.Model):
     class Meta:
         db_table = 'tasks'
         indexes = [models.Index(fields=['project', 'status'])]
+        permissions = [('export_task', 'Can export tasks')]
+
+
+class RolePermission(models.Model):
+    role = models.CharField(max_length=10, choices=Membership.ROLE_CHOICES)
+    permission = models.ForeignKey('auth.Permission', on_delete=models.CASCADE, related_name='role_mappings')
+
+    class Meta:
+        db_table = 'permission_mapping'
+        unique_together = ('role', 'permission')
