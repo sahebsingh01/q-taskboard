@@ -5,6 +5,7 @@ import { apiFetch, getToken } from "@/lib/api-client";
 import { Header } from "@/components/Header";
 import { StatusColumn } from "@/components/StatusColumn";
 import { TaskDetail } from "@/components/TaskDetail";
+import { ExportToAirtable } from "@/components/ExportToAirtable";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { ApiProjectDetail, ApiTask, TaskStatus } from "@/types";
 import { STATUS_ORDER } from "@/types";
@@ -89,7 +90,7 @@ export default function ProjectPage() {
                 </p>
               </div>
               {can("export_task") && (
-                <button className="border-2 border-accent hover:bg-accent px-4 py-2 rounded-md">Export</button>
+                <ExportToAirtable projectId={id!} />
               )}
             </div>
 
