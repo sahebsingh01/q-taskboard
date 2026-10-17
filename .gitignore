@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# Environment
+.env
+*.local
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+
+# AI conversations captured by pre-commit hook
+# (intentionally not ignored — they are part of the evaluation)

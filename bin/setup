@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# Manual setup (without Docker).
+# Requires: Python 3.12+, Node.js 20+, PostgreSQL 15+
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "==> configuring git hooks"
+git config core.hooksPath .git-hooks 2>/dev/null || true
+chmod +x .git-hooks/* 2>/dev/null || true
+
+if [ ! -f .env ]; then
+  echo "==> copying .env.example -> .env (edit POSTGRES_* if needed)"
+  cp .env.example .env
+fi
+
+echo "==> installing backend dependencies"
+cd backend
+pip install -r requirements.txt
+
+echo "==> running django migrations"
+python manage.py migrate
+
+echo "==> seeding database"
+python manage.py seed
+
+echo "==> running backend tests"
+python -m pytest
+cd ..
+
+echo "==> installing frontend dependencies"
+cd frontend
+npm install
+
+echo "==> running frontend tests"
+npm test
+cd ..
+
+cat <<EOF
+
+setup complete.
+
+start backend:   cd backend && python manage.py runserver
+start frontend:  cd frontend && npm run dev
+
+or use Docker:   docker-compose up --build
+
+then visit http://localhost:3000
+
+EOF
