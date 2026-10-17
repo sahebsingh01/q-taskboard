@@ -6,6 +6,7 @@ import { Header } from "@/components/Header";
 import { StatusColumn } from "@/components/StatusColumn";
 import { TaskDetail } from "@/components/TaskDetail";
 import { ExportToAirtable } from "@/components/ExportToAirtable";
+import { ActivityFeed } from "@/components/ActivityFeed";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { ApiProjectDetail, ApiTask, TaskStatus } from "@/types";
 import { STATUS_ORDER } from "@/types";
@@ -39,6 +40,7 @@ export default function ProjectPage() {
     onSuccess: () => {
       setNewTitle("");
       queryClient.invalidateQueries({ queryKey: ["project", id] });
+      queryClient.invalidateQueries({ queryKey: ["activity", id] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : "create failed"),
   });
@@ -167,6 +169,8 @@ export default function ProjectPage() {
                 ))}
               </ul>
             </section>
+
+            {can("view_activity") && <ActivityFeed projectId={id!} />}
           </>
         )}
       </main>
@@ -178,6 +182,8 @@ export default function ProjectPage() {
           members={project.memberships}
           canEdit={can("change_task")}
           canDelete={can("delete_task")}
+          canViewComments={can("view_comment")}
+          canComment={can("add_comment")}
           onClose={() => setActiveTask(null)}
         />
       )}

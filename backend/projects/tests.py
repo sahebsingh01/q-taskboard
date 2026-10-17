@@ -111,10 +111,11 @@ class TestPermissionMapping:
     def test_member_permissions(self):
         assert self._codenames('member') == {
             'view_project', 'add_task', 'change_task', 'delete_task', 'view_task', 'export_task',
+            'add_comment', 'view_comment', 'view_activity',
         }
 
     def test_viewer_permissions(self):
-        assert self._codenames('viewer') == {'view_project', 'view_task'}
+        assert self._codenames('viewer') == {'view_project', 'view_task', 'view_comment', 'view_activity'}
 
     def test_viewer_cannot_edit_task(self, client, user):
         owner = User.objects.create_user(email='owner@example.com', name='Owner', password='password123')
@@ -162,7 +163,9 @@ class TestPermissionMapping:
         assert response.status_code == 200
         projects = response.data['projects']
         assert set(projects) == {str(admin_project.id), str(viewer_project.id)}
-        assert projects[str(viewer_project.id)] == {'role': 'viewer', 'permissions': ['view_project', 'view_task']}
+        assert projects[str(viewer_project.id)] == {
+            'role': 'viewer', 'permissions': ['view_activity', 'view_comment', 'view_project', 'view_task'],
+        }
         assert 'delete_project' in projects[str(admin_project.id)]['permissions']
 
     def test_my_permissions_requires_auth(self, client):
